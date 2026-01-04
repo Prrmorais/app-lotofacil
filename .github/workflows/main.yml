@@ -31,16 +31,19 @@ jobs:
     - name: Configurar Android SDK
       uses: android-actions/setup-android@v3
 
-    # CORREÇÃO AQUI: Atualizado para a versão que o Flet exige (3.38.5)
-    - name: Instalar Flutter (Motor do Flet)
+    # AQUI ESTÁ A SOLUÇÃO:
+    # Usamos o canal 'stable'. Isso instala a versão mais recente e estável do Flutter.
+    # O Flet vai reconhecer que o Flutter já existe e pulará a etapa de pergunta [y/n].
+    - name: Instalar Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.38.5'
+        channel: 'stable'
+        architecture: x64
 
     - name: Construir APK
-      # Adicionamos --no-android-checks para evitar perguntas interativas extras
+      # Comando padrão, sem invenções
       run: |
-        flet build apk --verbose --no-android-checks
+        flet build apk --verbose
 
     - name: Upload do APK Gerado
       uses: actions/upload-artifact@v4
