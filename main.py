@@ -10,7 +10,43 @@ def main(page: ft.Page):
     page.window_height = 800
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = "auto"
+
+    # --- ELEMENTOS DA TELA (Declarados antes para serem usados nas funções) ---
     
+    titulo = ft.Text("Gerador Lotofácil", size=30, weight="bold", color="blue")
+    
+    txt_concurso = ft.TextField(label="Concurso (ex: 3200)", width=200)
+    
+    dd_estrategia = ft.Dropdown(
+        width=400,
+        label="Estratégia",
+        value="ia",
+        options=[
+            ft.dropdown.Option("ia", "IA (Estatística)"),
+            ft.dropdown.Option("pessoal", "Meus Números"),
+        ],
+    )
+
+    txt_resultado = ft.TextField(
+        label="Último Resultado (15 números)",
+        multiline=True,
+        min_lines=2,
+        hint_text="Ex: 1 2 3 4 5..."
+    )
+
+    lbl_status = ft.Text("Aguardando...", color="grey")
+    lista_resultados = ft.ListView(expand=1, spacing=10, padding=20)
+
+    # --- FUNÇÃO DE LIMPEZA (NOVIDADE) ---
+    def limpar_filtros(e=None):
+        """Limpa todos os campos e reinicia o status"""
+        txt_concurso.value = ""
+        txt_resultado.value = ""
+        lbl_status.value = "Campos limpos. Pronto para iniciar."
+        lbl_status.color = "grey"
+        lista_resultados.controls.clear()
+        page.update()
+
     # --- LÓGICA (BACK-END) ---
     def gerar_jogos(e):
         # 1. Feedback visual
@@ -19,15 +55,13 @@ def main(page: ft.Page):
         lbl_status.color = "blue"
         page.update()
 
-        # 2. DEFINIR CAMINHO DA PASTA (AJUSTE PARA ANDROID)
-        # Se for Android, salva em Downloads. Se for PC, salva no D:
+        # 2. DEFINIR CAMINHO DA PASTA
         try:
             if page.platform == ft.PagePlatform.ANDROID:
                 caminho_pasta = "/storage/emulated/0/Download"
             else:
                 caminho_pasta = r"D:\Phyton\Lotofacil"
                 
-            # Cria a pasta se não for Android e ela não existir
             if page.platform != ft.PagePlatform.ANDROID and not os.path.exists(caminho_pasta):
                 os.makedirs(caminho_pasta)
                 
@@ -149,40 +183,26 @@ def main(page: ft.Page):
 
         page.update()
 
-    # --- ELEMENTOS DA TELA ---
+    # --- BOTÕES ---
     
-    titulo = ft.Text("Gerador Lotofácil", size=30, weight="bold", color="blue")
-    
-    txt_concurso = ft.TextField(label="Concurso (ex: 3200)", width=200)
-    
-    dd_estrategia = ft.Dropdown(
-        width=400,
-        label="Estratégia",
-        value="ia",
-        options=[
-            ft.dropdown.Option("ia", "IA (Estatística)"),
-            ft.dropdown.Option("pessoal", "Meus Números"),
-        ],
-    )
-
-    txt_resultado = ft.TextField(
-        label="Último Resultado (15 números)",
-        multiline=True,
-        min_lines=2,
-        hint_text="Ex: 1 2 3 4 5..."
-    )
-
-    # Botão Simplificado
+    # Botão de Gerar
     btn_gerar = ft.FilledButton(
-        content=ft.Text("GERAR JOGOS"),
-        width=200,
+        content=ft.Text("GERAR"),
+        width=140,
         height=50,
         on_click=gerar_jogos
     )
 
-    lbl_status = ft.Text("Aguardando...", color="grey")
-    lista_resultados = ft.ListView(expand=1, spacing=10, padding=20)
+    # Botão de Limpar (Novo)
+    btn_limpar = ft.FilledButton(
+        content=ft.Text("LIMPAR"),
+        width=100,
+        height=50,
+        style=ft.ButtonStyle(bgcolor="grey"), # Cor diferente para diferenciar
+        on_click=limpar_filtros
+    )
 
+    # --- MONTAGEM DA TELA ---
     page.add(
         ft.Column(
             [
@@ -191,7 +211,12 @@ def main(page: ft.Page):
                 dd_estrategia,
                 txt_resultado,
                 ft.Divider(),
-                ft.Row([btn_gerar], alignment=ft.MainAxisAlignment.CENTER),
+                # Linha com os dois botões
+                ft.Row(
+                    [btn_limpar, btn_gerar], 
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=20
+                ),
                 ft.Divider(),
                 lbl_status,
                 lista_resultados
@@ -199,6 +224,9 @@ def main(page: ft.Page):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
     )
+    
+    # Garante que começa limpo ao abrir o App
+    limpar_filtros()
 
 # INICIALIZAÇÃO SEGURA
 if __name__ == "__main__":
