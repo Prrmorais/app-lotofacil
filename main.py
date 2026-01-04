@@ -2,6 +2,7 @@ import flet as ft
 import itertools
 import pandas as pd
 import os
+import sys
 
 def main(page: ft.Page):
     # --- CONFIGURAÇÕES VISUAIS ---
@@ -11,11 +12,23 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = "auto"
 
-    # --- ELEMENTOS DA TELA (Declarados antes para serem usados nas funções) ---
+    # --- ELEMENTOS DA TELA ---
     
     titulo = ft.Text("Gerador Lotofácil", size=30, weight="bold", color="blue")
     
-    txt_concurso = ft.TextField(label="Concurso (ex: 3200)", width=200)
+    # Campo 1: O concurso que você vai jogar (Alvo)
+    txt_concurso = ft.TextField(
+        label="Concurso Alvo (Ex: 3580)", 
+        width=180,
+        text_align=ft.TextAlign.CENTER
+    )
+
+    # Campo 2: O concurso anterior (Referência)
+    txt_base = ft.TextField(
+        label="Concurso Base (Ex: 3579)", 
+        width=180,
+        text_align=ft.TextAlign.CENTER
+    )
     
     dd_estrategia = ft.Dropdown(
         width=400,
@@ -28,26 +41,32 @@ def main(page: ft.Page):
     )
 
     txt_resultado = ft.TextField(
-        label="Último Resultado (15 números)",
+        label="Dezenas do Concurso Base (15 números)",
         multiline=True,
         min_lines=2,
-        hint_text="Ex: 1 2 3 4 5..."
+        hint_text="Cole aqui as dezenas do último sorteio..."
     )
 
     lbl_status = ft.Text("Aguardando...", color="grey")
     lista_resultados = ft.ListView(expand=1, spacing=10, padding=20)
 
-    # --- FUNÇÃO DE LIMPEZA (NOVIDADE) ---
+    # --- FUNÇÕES DE CONTROLE ---
+    
     def limpar_filtros(e=None):
-        """Limpa todos os campos e reinicia o status"""
+        """Limpa todos os campos"""
         txt_concurso.value = ""
+        txt_base.value = ""
         txt_resultado.value = ""
-        lbl_status.value = "Campos limpos. Pronto para iniciar."
+        lbl_status.value = "Campos limpos."
         lbl_status.color = "grey"
         lista_resultados.controls.clear()
         page.update()
 
-    # --- LÓGICA (BACK-END) ---
+    def fechar_app(e):
+        """Fecha o aplicativo"""
+        page.window_close()
+
+    # --- LÓGICA PRINCIPAL (GERADOR) ---
     def gerar_jogos(e):
         # 1. Feedback visual
         lista_resultados.controls.clear()
@@ -71,13 +90,14 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # 3. Inputs
-        concurso = txt_concurso.value.strip()
+        # 3. Inputs e Validações
+        concurso_alvo = txt_concurso.value.strip()
+        concurso_base = txt_base.value.strip()
         entrada_numeros = txt_resultado.value
         estrategia = dd_estrategia.value
 
-        if not concurso:
-            lbl_status.value = "Digite o concurso."
+        if not concurso_alvo:
+            lbl_status.value = "Digite o Concurso Alvo."
             lbl_status.color = "red"
             page.update()
             return
@@ -132,7 +152,7 @@ def main(page: ft.Page):
         
         jogos_finais = melhores_jogos[:4]
 
-        # 8. Resultados
+        # 8. Saída
         if not jogos_finais:
             lbl_status.value = "Nenhum jogo encontrado."
             lbl_status.color = "orange"
@@ -142,20 +162,21 @@ def main(page: ft.Page):
             str_20 = ";".join([f"{n:02d}" for n in sorted(list(pool_20))])
             str_ult = ";".join([f"{n:02d}" for n in sorted(list(ultimo_resultado))])
             
-            dados_csv.append({"Descrição": "Matriz", "Dezenas": str_20, "Info": nome_est})
-            dados_csv.append({"Descrição": "Ref Anterior", "Dezenas": str_ult, "Info": "Base"})
+            info_base = f"Conc. {concurso_base}" if concurso_base else "Base"
+            
+            dados_csv.append({"Descrição": "Matriz Utilizada", "Dezenas": str_20, "Info": nome_est})
+            dados_csv.append({"Descrição": "Último Resultado", "Dezenas": str_ult, "Info": info_base})
 
             for i, jogo in enumerate(jogos_finais):
                 str_jogo = ";".join([f"{n:02d}" for n in jogo['numeros']])
                 str_visual = " - ".join([f"{n:02d}" for n in jogo['numeros']])
                 
                 dados_csv.append({
-                    "Descrição": f"Cartão {i+1}", 
+                    "Descrição": f"Cartão {i+1} (Para {concurso_alvo})", 
                     "Dezenas": str_jogo, 
                     "Info": f"R:{jogo['repetidas']} | P:{jogo['primos']}"
                 })
 
-                # Card Visual
                 card = ft.Container(
                     content=ft.Column([
                         ft.Text(f"Cartão {i+1}", weight="bold", size=16),
@@ -170,12 +191,12 @@ def main(page: ft.Page):
                 lista_resultados.controls.append(card)
 
             # Salvar
-            nome_arquivo = f"jogos_lotofacil_{concurso}.csv"
+            nome_arquivo = f"jogos_lotofacil_{concurso_alvo}.csv"
             caminho_completo = os.path.join(caminho_pasta, nome_arquivo)
             try:
                 df = pd.DataFrame(dados_csv)
                 df.to_csv(caminho_completo, index=False, sep=';', encoding='utf-8-sig')
-                lbl_status.value = f"Sucesso! Salvo em Downloads/{nome_arquivo}"
+                lbl_status.value = f"Salvo: Downloads/{nome_arquivo}"
                 lbl_status.color = "green"
             except Exception as e:
                 lbl_status.value = f"Erro ao salvar: {e}"
@@ -183,23 +204,32 @@ def main(page: ft.Page):
 
         page.update()
 
-    # --- BOTÕES ---
+    # --- BOTÕES DA INTERFACE ---
     
-    # Botão de Gerar
+    # 1. Botão GERAR (Azul, destaque)
     btn_gerar = ft.FilledButton(
         content=ft.Text("GERAR"),
-        width=140,
+        width=120,
         height=50,
         on_click=gerar_jogos
     )
 
-    # Botão de Limpar (Novo)
+    # 2. Botão LIMPAR (Cinza)
     btn_limpar = ft.FilledButton(
         content=ft.Text("LIMPAR"),
         width=100,
         height=50,
-        style=ft.ButtonStyle(bgcolor="grey"), # Cor diferente para diferenciar
+        style=ft.ButtonStyle(bgcolor="grey"),
         on_click=limpar_filtros
+    )
+
+    # 3. Botão SAIR (Vermelho - NOVO)
+    btn_sair = ft.FilledButton(
+        content=ft.Text("SAIR"),
+        width=80,
+        height=50,
+        style=ft.ButtonStyle(bgcolor="red"),
+        on_click=fechar_app
     )
 
     # --- MONTAGEM DA TELA ---
@@ -207,15 +237,15 @@ def main(page: ft.Page):
         ft.Column(
             [
                 titulo,
-                txt_concurso,
+                ft.Row([txt_concurso, txt_base], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
                 dd_estrategia,
                 txt_resultado,
                 ft.Divider(),
-                # Linha com os dois botões
+                # Linha com os 3 botões
                 ft.Row(
-                    [btn_limpar, btn_gerar], 
+                    [btn_sair, btn_limpar, btn_gerar], 
                     alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=20
+                    spacing=10
                 ),
                 ft.Divider(),
                 lbl_status,
@@ -225,9 +255,8 @@ def main(page: ft.Page):
         )
     )
     
-    # Garante que começa limpo ao abrir o App
+    # Inicia limpo
     limpar_filtros()
 
-# INICIALIZAÇÃO SEGURA
 if __name__ == "__main__":
     ft.app(target=main)
