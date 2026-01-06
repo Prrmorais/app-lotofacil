@@ -1,4 +1,2 @@
 flet
-pandas
-certifi
 requests
