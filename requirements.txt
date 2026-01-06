@@ -1,4 +1,2 @@
-flet
-pandas
-certifi
+flet==0.25.2
 requests
