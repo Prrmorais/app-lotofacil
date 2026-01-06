@@ -1,42 +1,37 @@
 import flet as ft
 import itertools
-import csv  # Substitui o Pandas (Nativo e Leve)
-import os
+import csv
 import sys
-import requests
-from collections import Counter
 
-# Variável global para guardar os dados na memória (Lista de Dicionários)
+# Variável global para dados
 dados_para_salvar = []
 
 def main(page: ft.Page):
     global dados_para_salvar
     
-    # Configurações para evitar travamentos
-    page.title = "Loto Leve"
-    page.window_width = 400
+    # Configuração da Janela
+    page.title = "Lotofácil Offline"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.scroll = "auto"
+    page.window_width = 400
 
-    # --- COMPONENTE DE SALVAR (FILE PICKER) ---
+    # --- SISTEMA DE SALVAR ARQUIVO (Nativo) ---
     def salvar_arquivo_final(e: ft.FilePickerResultEvent):
         global dados_para_salvar
         if e.path:
             try:
-                # Lógica nativa do Python para criar CSV (Sem Pandas)
+                # Cria o CSV usando biblioteca padrão do Python (Super Leve)
                 with open(e.path, mode='w', newline='', encoding='utf-8-sig') as f:
-                    # Define as colunas
-                    writer = csv.DictWriter(f, fieldnames=["Tipo", "Dezenas", "Info"], delimiter=';')
+                    writer = csv.DictWriter(f, fieldnames=["Descricao", "Dezenas", "Detalhes"], delimiter=';')
                     writer.writeheader()
-                    # Escreve as linhas
                     writer.writerows(dados_para_salvar)
                 
-                lbl_status.value = "ARQUIVO SALVO COM SUCESSO!"
+                lbl_status.value = "SUCESSO! Arquivo salvo."
                 lbl_status.color = "green"
-                page.open(ft.SnackBar(content=ft.Text("Sucesso! Verifique a pasta.")))
+                page.open(ft.SnackBar(content=ft.Text("Arquivo salvo com sucesso!")))
                 
             except Exception as erro:
-                lbl_status.value = f"Erro de gravação: {erro}"
+                lbl_status.value = f"Erro ao gravar: {erro}"
                 lbl_status.color = "red"
         else:
             lbl_status.value = "Salvamento cancelado."
@@ -45,94 +40,110 @@ def main(page: ft.Page):
     file_picker = ft.FilePicker(on_result=salvar_arquivo_final)
     page.overlay.append(file_picker)
 
-    # --- UI SIMPLIFICADA ---
-    titulo = ft.Text("Lotofácil Leve & Rápida", size=24, weight="bold", color="blue")
+    # --- UI ---
+    titulo = ft.Text("Gerador Lotofácil (Offline)", size=24, weight="bold", color="blue")
+    subtitulo = ft.Text("Matriz Estatística Fixa", size=14, color="grey")
+
+    # Inputs manuais (já que não temos internet)
+    txt_concurso_alvo = ft.TextField(label="Concurso Futuro", width=150, text_align="center", keyboard_type="number")
+    txt_ultimo_resultado = ft.TextField(
+        label="Digite o Último Resultado (separado por espaço)", 
+        multiline=True, 
+        min_lines=2, 
+        hint_text="Ex: 01 02 03 04 05..."
+    )
     
-    txt_concurso_base = ft.TextField(label="Último Concurso (Base)", width=180, text_align="center", keyboard_type="number")
-    txt_concurso_alvo = ft.TextField(label="Próximo Concurso", width=180, text_align="center", keyboard_type="number")
-    
-    chk_online = ft.Checkbox(label="Buscar Online (Recomendado)", value=True)
-    lbl_status = ft.Text("Pronto.", color="grey")
-    
+    lbl_status = ft.Text("Pronto para gerar.", color="grey", weight="bold")
     lista_res = ft.ListView(expand=1, spacing=10, padding=20)
 
-    # --- LÓGICA DE NEGÓCIO ---
+    # --- LÓGICA MATEMÁTICA PURA ---
     def processar(e):
         global dados_para_salvar
-        dados_para_salvar = [] # Limpa memória
+        dados_para_salvar = []
         lista_res.controls.clear()
         
-        lbl_status.value = "Processando..."
-        lbl_status.color = "blue"
+        lbl_status.value = "Calculando..."
         page.update()
 
-        # 1. Obter Base (Online ou Manual)
-        base_set = set()
-        fonte_info = "Manual/Padrão"
-        
-        if chk_online.value and txt_concurso_base.value:
-            try:
-                # Tenta baixar APENAS o último resultado (Mais rápido)
-                url = f"https://loteriascaixa-api.herokuapp.com/api/lotofacil/{txt_concurso_base.value}"
-                r = requests.get(url, timeout=4)
-                if r.status_code == 200:
-                    base_set = set([int(d) for d in r.json()['dezenas']])
-                    fonte_info = "Online (API)"
-            except:
-                fonte_info = "Falha Online (Usando Dummy)"
+        # 1. Validar Último Resultado
+        try:
+            texto_numeros = txt_ultimo_resultado.value.replace(",", " ").replace("-", " ")
+            lista_str = texto_numeros.split()
+            ultimo_resultado_set = set(map(int, lista_str))
+            
+            if len(ultimo_resultado_set) < 15:
+                lbl_status.value = f"Erro: Digite 15 números (Você digitou {len(ultimo_resultado_set)})"
+                lbl_status.color = "red"
+                page.update()
+                return
+        except:
+            lbl_status.value = "Erro: Digite apenas números no resultado."
+            lbl_status.color = "red"
+            page.update()
+            return
 
-        # Se falhou ou não tem internet, usa um dummy para não travar
-        if not base_set:
-             base_set = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}
-
-        # 2. Matriz Fixa (Para garantir leveza e rapidez hoje)
+        # 2. Matriz Fixa (Os 20 de Ouro)
         pool_20 = {1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 22, 23, 24, 25}
         fixas = {1, 3, 5, 10, 11, 13, 20, 23, 24, 25}
-        
-        # 3. Gerar Jogos
         variaveis = list(pool_20 - fixas)
-        jogos_validos = []
+
+        # 3. Gerar Combinações
+        jogos_filtrados = []
         
         for comb in itertools.combinations(variaveis, 5):
             jogo = fixas.union(comb)
-            # Filtro Repetidas
-            repetidas = len(jogo.intersection(base_set))
+            # Filtro: Repetidas do anterior
+            repetidas = len(jogo.intersection(ultimo_resultado_set))
             
-            if repetidas == 9: # Filtro Rígido
-                jogos_validos.append(sorted(list(jogo)))
+            # Filtro Matemático Rigoroso (Apenas 9 repetidas)
+            if repetidas == 9:
+                jogos_filtrados.append(sorted(list(jogo)))
 
-        # Pega só os 5 primeiros para não encher a tela
-        finais = jogos_validos[:5]
-        
+        # Se não achou com 9, tenta com 8 ou 10 (Plano B)
+        if not jogos_filtrados:
+            for comb in itertools.combinations(variaveis, 5):
+                jogo = fixas.union(comb)
+                repetidas = len(jogo.intersection(ultimo_resultado_set))
+                if repetidas in [8, 10]:
+                    jogos_filtrados.append(sorted(list(jogo)))
+
+        # Pega os Top 5
+        finais = jogos_filtrados[:5]
+
+        # 4. Exibir e Preparar Salvar
         if not finais:
-            lbl_status.value = "Nenhum jogo com 9 repetidas encontrado na matriz."
+            lbl_status.value = "Nenhum jogo compatível com a matriz."
             lbl_status.color = "orange"
         else:
-            # Prepara dados para o CSV
-            str_base = ";".join([f"{n:02d}" for n in sorted(list(base_set))])
-            dados_para_salvar.append({"Tipo": "Base", "Dezenas": str_base, "Info": fonte_info})
+            # Salva o resultado base
+            str_base = " - ".join([f"{n:02d}" for n in sorted(list(ultimo_resultado_set))])
+            dados_para_salvar.append({"Descricao": "Base Usada", "Dezenas": str_base, "Detalhes": "Manual"})
+            
+            lista_res.controls.append(
+                ft.Container(content=ft.Text(f"Base: {str_base}", color="orange"), padding=5)
+            )
 
             for i, j in enumerate(finais):
                 str_num = ";".join([f"{n:02d}" for n in j])
                 str_vis = " - ".join([f"{n:02d}" for n in j])
                 
-                # Adiciona na lista de salvar
-                dados_para_salvar.append({"Tipo": f"Jogo {i+1}", "Dezenas": str_num, "Info": "R:9"})
+                # Dados CSV
+                dados_para_salvar.append({"Descricao": f"Jogo {i+1}", "Dezenas": str_num, "Detalhes": "Gerado"})
                 
-                # Adiciona na tela
+                # Visual Tela
                 card = ft.Container(
                     content=ft.Column([
                         ft.Text(f"Jogo {i+1}", weight="bold"),
-                        ft.Text(str_vis, size=18, color="blue")
+                        ft.Text(str_vis, size=20, color="blue")
                     ]),
                     padding=10, bgcolor="blue50", border_radius=8
                 )
                 lista_res.controls.append(card)
 
-            lbl_status.value = "Análise concluída. Salve o arquivo."
+            lbl_status.value = "Sucesso! Clique abaixo para salvar."
             lbl_status.color = "green"
             
-            # Abre janela de salvar
+            # Botão de Salvar aparece agora
             file_picker.save_file(file_name=f"Loto_{txt_concurso_alvo.value}.csv", allowed_extensions=["csv"])
 
         page.update()
@@ -141,15 +152,15 @@ def main(page: ft.Page):
         sys.exit()
 
     # Botões
-    btn_gerar = ft.FilledButton("GERAR JOGOS", on_click=processar, width=200)
-    btn_sair = ft.FilledButton("SAIR", on_click=sair, style=ft.ButtonStyle(bgcolor="red"))
+    btn_gerar = ft.FilledButton("GERAR E SALVAR", on_click=processar, width=200, height=50)
+    btn_sair = ft.FilledButton("SAIR", on_click=sair, style=ft.ButtonStyle(bgcolor="red"), width=100)
 
     page.add(
         ft.Column([
-            titulo,
-            txt_concurso_base,
+            titulo, subtitulo,
             txt_concurso_alvo,
-            chk_online,
+            txt_ultimo_resultado,
+            ft.Divider(),
             ft.Row([btn_sair, btn_gerar], alignment="center"),
             lbl_status,
             lista_res
