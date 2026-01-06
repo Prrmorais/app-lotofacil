@@ -1,4 +1,4 @@
-name: Construir APK Android
+name: Build Android APK
 
 on:
   push:
@@ -10,40 +10,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Baixar Código (Checkout)
+    # 1. Baixa seu código
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Configurar Python
+    # 2. Configura Python 3.11 (Estável)
+    - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Instalar Dependências
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Configurar Java (Necessário para Android)
+    # 3. Configura Java 17 (Obrigatório para Android moderno)
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Configurar Android SDK
+    # 4. Configura o Kit de Desenvolvimento Android
+    - name: Setup Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Instalar Ferramentas de Build do Flet
+    # 5. Instala o Flet e dependências
+    - name: Install Dependencies
       run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
         pip install flet
-        # Força a instalação do Flutter interno do Flet
-        flet --version
 
-    - name: Construir APK
+    # 6. Constrói o APK (O comando mágico)
+    - name: Build APK
       run: |
-        # O comando --verbose ajuda a ver o erro real se falhar
+        # Garante que não sobrou lixo de tentativas anteriores
+        rm -rf build
+        # Comando de build com log detalhado
         flet build apk --verbose
 
-    - name: Upload do APK Gerado
+    # 7. Salva o arquivo para você baixar
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: AppLotofacil
