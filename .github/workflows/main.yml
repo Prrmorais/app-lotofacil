@@ -41,10 +41,10 @@ jobs:
     # 6. Constrói o APK (O comando mágico)
     - name: Build APK
       run: |
-        # Garante que não sobrou lixo de tentativas anteriores
+        # Garante que não sobrou lixo
         rm -rf build
-        # Comando de build com log detalhado
-        flet build apk --verbose
+        # O 'yes |' responde "y" automaticamente para a instalação do Flutter
+        yes | flet build apk --verbose
 
     # 7. Salva o arquivo para você baixar
     - name: Upload APK
