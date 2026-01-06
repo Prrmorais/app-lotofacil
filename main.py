@@ -6,7 +6,7 @@ import sys
 import requests
 from collections import Counter
 
-# Variável global para guardar os dados temporariamente antes de salvar
+# Variável global para guardar os dados temporariamente
 df_para_salvar = None
 
 def main(page: ft.Page):
@@ -37,37 +37,27 @@ def main(page: ft.Page):
     barra_progresso = ft.ProgressBar(width=400, color="blue", bgcolor="#eeeeee", visible=False)
     lista_resultados = ft.ListView(expand=1, spacing=10, padding=20)
 
-    # --- FUNÇÃO DE SALVAMENTO REAL (CALLBACK) ---
+    # --- COMPONENTE FILE PICKER ---
     def salvar_arquivo_final(e: ft.FilePickerResultEvent):
-        """Esta função é chamada DEPOIS que você escolhe a pasta no celular"""
         global df_para_salvar
-        
         if e.path:
             try:
-                # Salva no caminho que o usuário escolheu
                 df_para_salvar.to_csv(e.path, index=False, sep=';', encoding='utf-8-sig')
                 lbl_status.value = f"Sucesso! Arquivo salvo."
                 lbl_status.color = "green"
-                
-                # Exibe um alerta de confirmação
                 page.open(ft.SnackBar(content=ft.Text(f"Arquivo salvo com sucesso!")))
-                
             except Exception as erro:
                 lbl_status.value = f"Erro ao gravar: {erro}"
                 lbl_status.color = "red"
         else:
-            # Usuário cancelou a janela de salvar
             lbl_status.value = "Salvamento cancelado."
             lbl_status.color = "orange"
-        
         page.update()
 
-    # --- COMPONENTE FILE PICKER (SELETOR DE ARQUIVOS) ---
-    # Este componente invisível gerencia a janela de "Salvar Como" do Android
     file_picker = ft.FilePicker(on_result=salvar_arquivo_final)
     page.overlay.append(file_picker)
 
-    # --- FUNÇÕES ---
+    # --- FUNÇÕES AUXILIARES ---
     def fechar_app(e):
         sys.exit()
 
@@ -127,7 +117,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # IA / Estatística
+        # 1. IA / Estatística (Matriz)
         pool_20, fixas = set(), set()
         info_estrategia = "Manual"
         
@@ -147,12 +137,12 @@ def main(page: ft.Page):
             fixas = {1, 3, 5, 10, 11, 13, 20, 23, 24, 25}
             info_estrategia = "OFFLINE"
 
-        # Exibir Matriz
+        # VISUAL 1: Exibir Matriz (VERDE)
         lista_20_ordenada = sorted(list(pool_20))
         str_20_visual = " - ".join([f"{n:02d}" for n in lista_20_ordenada])
         card_20 = ft.Container(
             content=ft.Column([
-                ft.Text("MATRIZ SELECIONADA:", weight="bold", size=14),
+                ft.Text("MATRIZ SELECIONADA (20):", weight="bold", size=14),
                 ft.Text(str_20_visual, size=18, color="green", weight="bold"),
                 ft.Text(f"Fonte: {info_estrategia}", size=12, italic=True)
             ]),
@@ -161,8 +151,10 @@ def main(page: ft.Page):
         )
         lista_resultados.controls.append(card_20)
 
-        # Último resultado (para repetidas)
+        # 2. Obter Resultado Base (Para filtro de repetidas)
         ultimo_resultado_set = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15} # Dummy padrão
+        origem_base = "Fictício (Erro Online)"
+        
         if chk_usar_online.value:
             try:
                 headers = {'User-Agent': 'Mozilla/5.0'}
@@ -170,9 +162,25 @@ def main(page: ft.Page):
                 r = requests.get(url, headers=headers, timeout=3)
                 if r.status_code == 200:
                     ultimo_resultado_set = set([int(d) for d in r.json()['dezenas']])
+                    origem_base = "Online (Caixa)"
             except: pass
 
-        # Motor Matemático
+        # VISUAL 2: Exibir Concurso Base (LARANJA - NOVO)
+        lista_base_ordenada = sorted(list(ultimo_resultado_set))
+        str_base_visual = " - ".join([f"{n:02d}" for n in lista_base_ordenada])
+        
+        card_base = ft.Container(
+            content=ft.Column([
+                ft.Text(f"CONCURSO BASE ({txt_concurso_base.value}):", weight="bold", size=14),
+                ft.Text(str_base_visual, size=18, color="orange", weight="bold"), # Texto Laranja
+                ft.Text(f"Fonte: {origem_base} | Usado para filtro de repetidas", size=12, italic=True)
+            ]),
+            padding=15, bgcolor="orange50", border=ft.border.all(1, "orange"),
+            border_radius=10, margin=5
+        )
+        lista_resultados.controls.append(card_base)
+
+        # 3. Motor Matemático
         variaveis = list(pool_20 - fixas)
         jogos_candidatos = []
         for combinacao in itertools.combinations(variaveis, 5):
@@ -188,7 +196,7 @@ def main(page: ft.Page):
             melhores_jogos.extend(reserva)
         jogos_finais = melhores_jogos[:5]
 
-        # PREPARAR DADOS E SALVAR
+        # 4. Exibir Jogos Finais (AZUL)
         if not jogos_finais:
             lbl_status.value = "Nenhum jogo encontrado."
         else:
@@ -212,12 +220,11 @@ def main(page: ft.Page):
                 )
                 lista_resultados.controls.append(card)
 
-            # --- A MÁGICA ACONTECE AQUI ---
-            # 1. Cria o DataFrame na memória
+            # Preparar para salvar
             df_para_salvar = pd.DataFrame(dados_csv)
+            lbl_status.value = "Análise pronta! Clique em Gerar para salvar se desejar."
             
-            # 2. Abre a janela do Android para o usuário escolher onde salvar
-            lbl_status.value = "Escolha onde salvar o arquivo..."
+            # Abre o seletor automaticamente (Opcional, se preferir clique manual remova essa linha)
             nome_sug = f"Loto_{txt_concurso_alvo.value}.csv"
             file_picker.save_file(file_name=nome_sug, allowed_extensions=["csv"])
 
