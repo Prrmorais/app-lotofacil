@@ -6,12 +6,7 @@ import sys
 import requests
 from collections import Counter
 
-# Variável global para guardar os dados temporariamente antes de salvar
-df_para_salvar = None
-
 def main(page: ft.Page):
-    global df_para_salvar
-    
     # --- CONFIGURAÇÕES VISUAIS ---
     page.title = "Gerador Lotofácil Pro Online"
     page.window_width = 450
@@ -20,54 +15,39 @@ def main(page: ft.Page):
     page.scroll = "auto"
 
     # --- ELEMENTOS DA TELA ---
+    
     titulo = ft.Text("Lotofácil IA Online", size=28, weight="bold", color="blue")
     
     txt_concurso_alvo = ft.TextField(
-        label="Próximo Concurso", width=150, text_align=ft.TextAlign.CENTER
+        label="Próximo Concurso", 
+        width=150, 
+        text_align=ft.TextAlign.CENTER
     )
+
     txt_concurso_base = ft.TextField(
-        label="Último Sorteado", width=150, text_align=ft.TextAlign.CENTER
+        label="Último Sorteado", 
+        width=150, 
+        text_align=ft.TextAlign.CENTER
     )
+
     txt_qtd_analise = ft.TextField(
-        label="Analisar últimos X concursos?", value="10", width=250, 
-        text_align=ft.TextAlign.CENTER, keyboard_type=ft.KeyboardType.NUMBER
+        label="Analisar últimos X concursos?",
+        value="10",
+        width=250,
+        text_align=ft.TextAlign.CENTER,
+        keyboard_type=ft.KeyboardType.NUMBER
     )
+    
     chk_usar_online = ft.Checkbox(label="Buscar estatísticas online", value=True)
+
     lbl_status = ft.Text("Pronto.", color="grey", size=14, weight="bold")
+    
     barra_progresso = ft.ProgressBar(width=400, color="blue", bgcolor="#eeeeee", visible=False)
+    
     lista_resultados = ft.ListView(expand=1, spacing=10, padding=20)
 
-    # --- FUNÇÃO DE SALVAMENTO REAL (CALLBACK) ---
-    def salvar_arquivo_final(e: ft.FilePickerResultEvent):
-        """Esta função é chamada DEPOIS que você escolhe a pasta no celular"""
-        global df_para_salvar
-        
-        if e.path:
-            try:
-                # Salva no caminho que o usuário escolheu
-                df_para_salvar.to_csv(e.path, index=False, sep=';', encoding='utf-8-sig')
-                lbl_status.value = f"Sucesso! Arquivo salvo."
-                lbl_status.color = "green"
-                
-                # Exibe um alerta de confirmação
-                page.open(ft.SnackBar(content=ft.Text(f"Arquivo salvo com sucesso!")))
-                
-            except Exception as erro:
-                lbl_status.value = f"Erro ao gravar: {erro}"
-                lbl_status.color = "red"
-        else:
-            # Usuário cancelou a janela de salvar
-            lbl_status.value = "Salvamento cancelado."
-            lbl_status.color = "orange"
-        
-        page.update()
-
-    # --- COMPONENTE FILE PICKER (SELETOR DE ARQUIVOS) ---
-    # Este componente invisível gerencia a janela de "Salvar Como" do Android
-    file_picker = ft.FilePicker(on_result=salvar_arquivo_final)
-    page.overlay.append(file_picker)
-
     # --- FUNÇÕES ---
+
     def fechar_app(e):
         sys.exit()
 
@@ -80,89 +60,131 @@ def main(page: ft.Page):
         page.update()
 
     def buscar_estatisticas_online(ultimo_concurso, qtd_analise):
+        """Busca online disfarçando-se de navegador"""
         numeros_contados = []
+        erros_detalhes = []
+        
         try:
             base = int(ultimo_concurso)
             qtd = int(qtd_analise)
             sucesso = 0
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0'}
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124 Safari/537.36'
+            }
             
             for i in range(qtd):
                 concurso_atual = base - i
                 url = f"https://loteriascaixa-api.herokuapp.com/api/lotofacil/{concurso_atual}"
+                
                 try:
                     response = requests.get(url, headers=headers, timeout=5)
                     if response.status_code == 200:
-                        dezenas = [int(d) for d in response.json()['dezenas']]
+                        dados = response.json()
+                        dezenas = [int(d) for d in dados['dezenas']]
                         numeros_contados.extend(dezenas)
                         sucesso += 1
-                except:
+                    else:
+                        erros_detalhes.append(f"C{concurso_atual}:Status {response.status_code}")
+                except Exception as e:
+                    erros_detalhes.append(f"C{concurso_atual}:Erro Conexão")
                     continue
-            
-            if sucesso < 2: return None, None, "Falha Web (Poucos dados)"
+                
+            if sucesso < 2:
+                msg_erro = " | ".join(erros_detalhes[:3])
+                return None, None, f"Falha Web: {msg_erro}"
 
             frequencia = Counter(numeros_contados)
             top_20 = sorted([num for num, freq in frequencia.most_common(20)])
             fixas = sorted([num for num, freq in frequencia.most_common(10)])
-            return set(top_20), set(fixas), f"Sucesso: {sucesso} concursos."
+            
+            msg = f"Sucesso: {sucesso} concursos analisados."
+            return set(top_20), set(fixas), msg
 
         except Exception as e:
-            return None, None, f"Erro: {str(e)}"
+            return None, None, f"Erro Crítico: {str(e)}"
 
     # --- LÓGICA PRINCIPAL ---
     def gerar_jogos(e):
-        global df_para_salvar
         lista_resultados.controls.clear()
         btn_gerar.disabled = True
         barra_progresso.visible = True
-        lbl_status.value = "Processando..."
+        lbl_status.value = "Conectando... (Pode demorar 10s)"
         lbl_status.color = "blue"
         page.update()
 
-        # Validação
-        if not txt_concurso_alvo.value or not txt_concurso_base.value:
-            lbl_status.value = "Preencha os concursos."
+        # 1. Pasta
+        try:
+            if page.platform == ft.PagePlatform.ANDROID:
+                caminho_pasta = "/storage/emulated/0/Download"
+            else:
+                caminho_pasta = r"D:\Phyton\Lotofacil"
+            
+            if page.platform != ft.PagePlatform.ANDROID and not os.path.exists(caminho_pasta):
+                os.makedirs(caminho_pasta)
+        except Exception as erro:
+            lbl_status.value = f"Erro de Permissão na Pasta: {erro}"
+            lbl_status.color = "red"
             barra_progresso.visible = False
             btn_gerar.disabled = False
             page.update()
             return
 
-        # IA / Estatística
-        pool_20, fixas = set(), set()
+        # 2. Validação
+        if not txt_concurso_alvo.value or not txt_concurso_base.value:
+            lbl_status.value = "ERRO: Preencha os campos de concurso."
+            lbl_status.color = "red"
+            barra_progresso.visible = False
+            btn_gerar.disabled = False
+            page.update()
+            return
+
+        # 3. Busca Inteligente
+        pool_20 = set()
+        fixas = set()
         info_estrategia = "Manual"
-        
+        ultimo_resultado_set = set()
+
         if chk_usar_online.value:
             p20, fx, msg = buscar_estatisticas_online(txt_concurso_base.value, txt_qtd_analise.value)
+            
             if p20:
-                pool_20, fixas = p20, fx
+                pool_20 = p20
+                fixas = fx
                 info_estrategia = f"IA Online ({msg})"
-                lbl_status.value = "IA Concluída. Calculando jogos..."
+                lbl_status.value = f"Online OK! {msg}"
             else:
-                lbl_status.value = f"Erro Online: {msg}"
+                lbl_status.value = f"ERRO ONLINE: {msg}"
+                lbl_status.color = "red"
+                # Padrão
                 pool_20 = {1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 22, 23, 24, 25}
                 fixas = {1, 3, 5, 10, 11, 13, 20, 23, 24, 25}
-                info_estrategia = "OFFLINE"
+                info_estrategia = "OFFLINE (Falha na conexão)"
         else:
             pool_20 = {1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 22, 23, 24, 25}
             fixas = {1, 3, 5, 10, 11, 13, 20, 23, 24, 25}
-            info_estrategia = "OFFLINE"
+            info_estrategia = "Modo Offline Manual"
 
-        # Exibir Matriz
+        # --- EXIBIÇÃO DAS 20 DEZENAS SELECIONADAS (NOVO) ---
         lista_20_ordenada = sorted(list(pool_20))
         str_20_visual = " - ".join([f"{n:02d}" for n in lista_20_ordenada])
+        
         card_20 = ft.Container(
             content=ft.Column([
-                ft.Text("MATRIZ SELECIONADA:", weight="bold", size=14),
+                ft.Text("MATRIZ DE 20 DEZENAS SELECIONADA:", weight="bold", color="black", size=14),
                 ft.Text(str_20_visual, size=18, color="green", weight="bold"),
-                ft.Text(f"Fonte: {info_estrategia}", size=12, italic=True)
+                ft.Text(f"Fonte: {info_estrategia}", size=12, color="grey", italic=True)
             ]),
-            padding=15, bgcolor="green50", border=ft.border.all(1, "green"),
-            border_radius=10, margin=5
+            padding=15,
+            bgcolor="green50", # Cor verde claro para destacar
+            border=ft.border.all(1, "green"),
+            border_radius=10,
+            margin=5
         )
         lista_resultados.controls.append(card_20)
+        # ----------------------------------------------------
 
-        # Último resultado (para repetidas)
-        ultimo_resultado_set = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15} # Dummy padrão
+        # Tenta pegar último resultado para repetidas
         if chk_usar_online.value:
             try:
                 headers = {'User-Agent': 'Mozilla/5.0'}
@@ -170,27 +192,35 @@ def main(page: ft.Page):
                 r = requests.get(url, headers=headers, timeout=3)
                 if r.status_code == 200:
                     ultimo_resultado_set = set([int(d) for d in r.json()['dezenas']])
-            except: pass
+            except:
+                pass
 
-        # Motor Matemático
+        # 4. Cálculos
         variaveis = list(pool_20 - fixas)
         jogos_candidatos = []
+        
+        if not ultimo_resultado_set:
+            ultimo_resultado_set = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15} # Dummy
+
         for combinacao in itertools.combinations(variaveis, 5):
             jogo_atual = fixas.union(combinacao)
             repetidas = len(jogo_atual.intersection(ultimo_resultado_set))
-            primos = len(jogo_atual.intersection({2, 3, 5, 7, 11, 13, 17, 19, 23}))
-            jogos_candidatos.append({'numeros': sorted(list(jogo_atual)), 'repetidas': repetidas, 'primos': primos})
+            primos_set = {2, 3, 5, 7, 11, 13, 17, 19, 23}
+            qtd_primos = len(jogo_atual.intersection(primos_set))
+            jogos_candidatos.append({'numeros': sorted(list(jogo_atual)), 'repetidas': repetidas, 'primos': qtd_primos})
 
         melhores_jogos = [j for j in jogos_candidatos if j['repetidas'] == 9]
         if len(melhores_jogos) < 4:
             reserva = [j for j in jogos_candidatos if j['repetidas'] in [8, 10]]
             reserva.sort(key=lambda x: abs(x['primos'] - 5))
             melhores_jogos.extend(reserva)
+        
         jogos_finais = melhores_jogos[:5]
 
-        # PREPARAR DADOS E SALVAR
+        # 5. Exibição dos Jogos
         if not jogos_finais:
-            lbl_status.value = "Nenhum jogo encontrado."
+            lbl_status.value = "Nenhum jogo encontrado com esses critérios."
+            lbl_status.color = "orange"
         else:
             dados_csv = []
             str_20 = ";".join([f"{n:02d}" for n in sorted(list(pool_20))])
@@ -199,28 +229,33 @@ def main(page: ft.Page):
             dados_csv.append({"Tipo": "Base", "Dezenas": str_ult, "Info": txt_concurso_base.value})
 
             for i, jogo in enumerate(jogos_finais):
+                str_visual = " - ".join([f"{n:02d}" for n in jogo['numeros']])
                 str_csv = ";".join([f"{n:02d}" for n in jogo['numeros']])
-                str_vis = " - ".join([f"{n:02d}" for n in jogo['numeros']])
+                
                 dados_csv.append({"Tipo": f"Jogo {i+1}", "Dezenas": str_csv, "Info": f"R:{jogo['repetidas']}"})
                 
                 card = ft.Container(
                     content=ft.Column([
                         ft.Text(f"Jogo {i+1}", weight="bold"),
-                        ft.Text(str_vis, size=20, color="blue"),
+                        ft.Text(f"{str_visual}", size=20, color="blue"),
                         ft.Text(f"R:{jogo['repetidas']} | P:{jogo['primos']}", size=12)
-                    ]), padding=10, bgcolor="blue50", border_radius=10, margin=5
+                    ]),
+                    padding=10, bgcolor="blue50", border_radius=10, margin=5
                 )
                 lista_resultados.controls.append(card)
 
-            # --- A MÁGICA ACONTECE AQUI ---
-            # 1. Cria o DataFrame na memória
-            df_para_salvar = pd.DataFrame(dados_csv)
-            
-            # 2. Abre a janela do Android para o usuário escolher onde salvar
-            lbl_status.value = "Escolha onde salvar o arquivo..."
-            nome_sug = f"Loto_{txt_concurso_alvo.value}.csv"
-            file_picker.save_file(file_name=nome_sug, allowed_extensions=["csv"])
-
+            # Salvar
+            nome_arq = f"Loto_{txt_concurso_alvo.value}.csv"
+            caminho_final = os.path.join(caminho_pasta, nome_arq)
+            try:
+                df = pd.DataFrame(dados_csv)
+                df.to_csv(caminho_final, index=False, sep=';', encoding='utf-8-sig')
+                if "ERRO" not in lbl_status.value:
+                    lbl_status.value = f"Sucesso! Salvo em Downloads."
+                    lbl_status.color = "green"
+            except Exception as e:
+                lbl_status.value = f"Erro ao salvar: {e}"
+        
         barra_progresso.visible = False
         btn_gerar.disabled = False
         page.update()
