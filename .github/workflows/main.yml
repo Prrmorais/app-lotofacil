@@ -3,27 +3,28 @@ name: Construir APK Android
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Baixar Código
+    - name: Baixar Código (Checkout)
       uses: actions/checkout@v4
 
-    - name: Instalar Python
-      uses: actions/setup-python@v4
+    - name: Configurar Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
     - name: Instalar Dependências
       run: |
-        pip install flet
-        pip install pandas
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-    - name: Configurar Java
-      uses: actions/setup-java@v3
+    - name: Configurar Java (Necessário para Android)
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
@@ -31,20 +32,19 @@ jobs:
     - name: Configurar Android SDK
       uses: android-actions/setup-android@v3
 
-    - name: Instalar Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        channel: 'stable'
-        architecture: x64
+    - name: Instalar Ferramentas de Build do Flet
+      run: |
+        pip install flet
+        # Força a instalação do Flutter interno do Flet
+        flet --version
 
     - name: Construir APK
       run: |
+        # O comando --verbose ajuda a ver o erro real se falhar
         flet build apk --verbose
 
-    # CORREÇÃO AQUI:
-    # Usamos aspas e asteriscos ("**/*.apk") para ele caçar o arquivo onde quer que ele esteja.
     - name: Upload do APK Gerado
       uses: actions/upload-artifact@v4
       with:
         name: AppLotofacil
-        path: "**/*.apk"
+        path: build/apk/app-release.apk
